@@ -356,62 +356,75 @@ const sfx = {
   hooves: () => { for (let i = 0; i < 6; i++) tone(120 + (i % 2) * 30, .06, "sine", .18, -40, i * .09); },
   bell: () => { tone(880, .5, "sine", .08); tone(1320, .4, "sine", .04); },
 };
-// Crowd reactions, synthesized: a few dozen voices sung through vowel formants
-// ("yeah" for a cheer, "ooo" for a boo), a breathy noise bed, and for cheers some claps and whistles.
-function crowd(kind, big) {
+// Crowd reactions, synthesized. A cheer is a swelling crowd roar (filtered noise with a slow, uneven
+// swell) under a few hundred claps from a couple of dozen people; when the bot scores the hall goes
+// quiet except for one cricket.
+let applauseBuf = null;
+function makeApplause() {
+  // pre-rendered once: each clapper claps at their own pace, each clap a short bright burst
+  const sr = AC.sampleRate, len = Math.floor(sr * 3), b = AC.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = b.getChannelData(ch);
+    for (let p = 0; p < 26; p++) {
+      const rate = 3.6 + Math.random() * 2.2, amp = .25 + Math.random() * .35, tone = .25 + Math.random() * .5;
+      let t = Math.random() * .25;
+      while (t < 2.9) {
+        const i0 = Math.floor(t * sr), n = Math.floor(sr * (.012 + Math.random() * .01));
+        let lp = 0;
+        for (let i = 0; i < n * 4 && i0 + i < len; i++) {
+          const w = Math.random() * 2 - 1;
+          lp += (w - lp) * tone;                              // a softer or sharper palm
+          d[i0 + i] += (w - lp * .6) * amp * Math.exp(-i / n);
+        }
+        t += (1 + (Math.random() - .5) * .25) / rate;
+      }
+    }
+  }
+  return b;
+}
+function cheer(big) {
   if (!AC || muted || G.demo) return;
   if (!noiseBuf) { noiseBuf = AC.createBuffer(1, AC.sampleRate * 1.5, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
-  const cheer = kind === "cheer", t0 = AC.currentTime, dur = big ? 2.6 : 1.9, R = Math.random;
-  const end = t0 + dur, peak = (cheer ? .7 : .85) * (big ? 1.25 : 1);
+  if (!applauseBuf) applauseBuf = makeApplause();
+  const t0 = AC.currentTime, dur = big ? 3 : 2.3, end = t0 + dur, R = Math.random;
   const out = AC.createGain();
-  out.gain.setValueAtTime(.0001, t0);
-  out.gain.exponentialRampToValueAtTime(peak, t0 + (cheer ? .15 : .4));
-  out.gain.setValueAtTime(peak, t0 + dur * .45);
-  out.gain.exponentialRampToValueAtTime(.0001, end);
+  out.gain.value = big ? 1.25 : 1;
   out.connect(AC.destination);
-  const bus = AC.createGain();
-  const formants = cheer ? [[800, 5, 1], [1300, 7, .7], [2700, 9, .3]] : [[320, 4, 1], [780, 6, .4], [2400, 9, .08]];
-  for (const [fq, q, g] of formants) {
-    const bp = AC.createBiquadFilter(), gg = AC.createGain();
-    bp.type = "bandpass"; bp.frequency.value = fq; bp.Q.value = q; gg.gain.value = g * 2.2;
-    bus.connect(bp).connect(gg).connect(out);
+  // the roar: two bands of noise, each swelling and wavering on its own
+  for (const [fq, q, lvl] of [[520, .9, .55], [1350, 1.1, .4]]) {
+    const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
+    s.buffer = noiseBuf; s.loop = true; f.type = "bandpass"; f.frequency.value = fq; f.Q.value = q;
+    const pk = lvl * (big ? 1 : .8);
+    g.gain.setValueAtTime(.0001, t0);
+    g.gain.exponentialRampToValueAtTime(pk, t0 + .35);
+    g.gain.setValueAtTime(pk, t0 + dur * .35);
+    g.gain.exponentialRampToValueAtTime(.0001, end);
+    lfo.frequency.value = 2.5 + R() * 3; lg.gain.value = pk * .25;
+    lfo.connect(lg).connect(g.gain);
+    s.connect(f).connect(g).connect(out);
+    s.start(t0, R()); s.stop(end); lfo.start(t0); lfo.stop(end);
   }
-  const voices = big ? 22 : 16;
-  for (let i = 0; i < voices; i++) {
-    const o = AC.createOscillator(), g = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
-    const st = t0 + R() * (cheer ? .12 : .35), f0 = cheer ? 170 + R() * 280 : 90 + R() * 120;
-    o.type = "sawtooth";
-    // cheers rise, boos sag
-    o.frequency.setValueAtTime(f0 * (cheer ? .8 : 1.06), st);
-    o.frequency.linearRampToValueAtTime(f0, st + .3);
-    o.frequency.linearRampToValueAtTime(f0 * (cheer ? 1.15 : .8), end);
-    lfo.frequency.value = 4 + R() * 3; lg.gain.value = f0 * .025;
-    g.gain.setValueAtTime(.0001, st); g.gain.exponentialRampToValueAtTime(1.6 / voices, st + .12);
-    lfo.connect(lg).connect(o.frequency); o.connect(g).connect(bus);
-    o.start(st); lfo.start(st); o.stop(end + .05); lfo.stop(end + .05);
-  }
-  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), ng = AC.createGain();
-  s.buffer = noiseBuf; s.loop = true; f.type = "bandpass"; f.frequency.value = cheer ? 1400 : 450; f.Q.value = .6; ng.gain.value = cheer ? .45 : .35;
-  s.connect(f).connect(ng).connect(out); s.start(t0, R()); s.stop(end);
-  if (!cheer) return;
-  const claps = big ? 34 : 22;
-  for (let i = 0; i < claps; i++) {
-    const c = AC.createBufferSource(), cf = AC.createBiquadFilter(), cg = AC.createGain(), ct = t0 + .1 + R() * (dur - .5);
-    c.buffer = noiseBuf; cf.type = "bandpass"; cf.frequency.value = 1100 + R() * 1400; cf.Q.value = 1.4;
-    cg.gain.setValueAtTime(.12 + R() * .1, ct); cg.gain.exponentialRampToValueAtTime(.0001, ct + .05);
-    c.connect(cf).connect(cg).connect(AC.destination); c.start(ct, R()); c.stop(ct + .06);
-  }
-  for (let i = 0, n = big ? 2 : 1; i < n; i++) {
-    const w = AC.createOscillator(), wg = AC.createGain(), wt = t0 + .2 + R() * .6, wf = 2100 + R() * 700;
-    w.type = "sine"; w.frequency.setValueAtTime(wf * .8, wt); w.frequency.exponentialRampToValueAtTime(wf * 1.15, wt + .25);
-    w.frequency.setValueAtTime(wf * .9, wt + .45); w.frequency.exponentialRampToValueAtTime(wf * 1.2, wt + .75);
-    wg.gain.setValueAtTime(.0001, wt); wg.gain.exponentialRampToValueAtTime(.035, wt + .05);
-    wg.gain.setValueAtTime(.035, wt + .3); wg.gain.exponentialRampToValueAtTime(.0001, wt + .8);
-    w.connect(wg).connect(AC.destination); w.start(wt); w.stop(wt + .85);
-  }
+  // the applause, starting a beat after the roar and fading with it
+  const a = AC.createBufferSource(), ag = AC.createGain(), hp = AC.createBiquadFilter();
+  a.buffer = applauseBuf; hp.type = "highpass"; hp.frequency.value = 600;
+  ag.gain.setValueAtTime(.0001, t0); ag.gain.exponentialRampToValueAtTime(.55, t0 + .25);
+  ag.gain.setValueAtTime(.55, t0 + dur * .45); ag.gain.exponentialRampToValueAtTime(.0001, end);
+  a.connect(hp).connect(ag).connect(out); a.start(t0 + .05); a.stop(end);
 }
-// Cheer when a human scores, boo when the bot does.
-const crowdFor = (human, big) => crowd(human ? "cheer" : "boo", big);
+function cricket() {
+  if (!AC || muted || G.demo) return;
+  // a pause, then three chirps of four quick pulses each
+  const t0 = AC.currentTime + .5, o = AC.createOscillator(), g = AC.createGain();
+  o.type = "sine"; o.frequency.value = 4300 + Math.random() * 300;
+  g.gain.value = 0;
+  for (let c = 0; c < 3; c++) for (let p = 0; p < 4; p++) {
+    const t = t0 + c * .42 + p * .032;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.08, t + .006); g.gain.linearRampToValueAtTime(0, t + .02);
+  }
+  o.connect(g).connect(AC.destination); o.start(t0); o.stop(t0 + 1.2);
+}
+// The crowd cheers a human's score; the bot's score is met with polite silence.
+const crowdFor = (human, big) => human ? cheer(big) : cricket();
 let frVoice = null;
 function pickVoice() { try { const v = speechSynthesis.getVoices(); frVoice = v.find(x => /^fr(-|_)FR/i.test(x.lang)) || v.find(x => /^fr/i.test(x.lang)) || null; } catch (e) {} }
 try { pickVoice(); speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) {}
