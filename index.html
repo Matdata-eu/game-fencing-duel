@@ -131,6 +131,14 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
       </div>
       <div class="opts">
         <div class="field">
+          <div class="label">Game mode</div>
+          <div class="seg" id="skillSeg">
+            <button id="sk-starter" data-skill="starter">Starter</button>
+            <button id="sk-expert" data-skill="expert">Expert</button>
+          </div>
+          <p class="wdesc" id="skilldesc"></p>
+        </div>
+        <div class="field">
           <div class="label">Opponent</div>
           <div class="seg" id="modeSeg">
             <button id="mode-bot" data-mode="bot">Bot</button>
@@ -154,14 +162,14 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
           </div>
           <p class="wdesc" id="wdesc"></p>
         </div>
-        <div class="field">
+        <div class="field" id="clubField">
           <div class="label" id="clubLabel">Clubs</div>
           <div class="clubs">
             <select id="club1" aria-label="Red fencer's club"></select>
             <select id="club2" aria-label="Green fencer's club"></select>
           </div>
         </div>
-        <div class="field">
+        <div class="field" id="natField">
           <div class="label">Superpowers</div>
           <div class="clubs">
             <select id="nat1" aria-label="Red fencer's superpower"></select>
@@ -169,7 +177,7 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
           </div>
           <p class="wdesc" id="natdesc"></p>
         </div>
-        <div class="field">
+        <div class="field" id="lenField">
           <div class="label">Bout</div>
           <div class="seg" id="lenSeg">
             <button id="len-5" data-touches="5">5 touches</button>
@@ -283,10 +291,15 @@ function mixPose(a, b, k) {
 const clonePose = a => mixPose(a, a, 0);
 
 // ---------- settings ----------
-const settings = { mode: "bot", level: "medium", weapon: "foil", touches: 5, club1: "parcival", club2: "schekul", nat1: "bel", nat2: "ita" };
+const settings = { skill: "starter", mode: "bot", level: "medium", weapon: "foil", touches: 5, club1: "parcival", club2: "schekul", nat1: "bel", nat2: "ita" };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("pisteduel.settings") || "{}")); } catch (e) {}
 if (!WEAPONS[settings.weapon]) settings.weapon = "foil";
 if (!BOUT_TIME[settings.touches]) settings.touches = 5;
+if (settings.skill !== "expert") settings.skill = "starter";
+// Starter mode: steps, lunge, parry and riposte only; 5 touches; no superpowers.
+const EXPERT = () => settings.skill === "expert";
+const TOUCHES = () => EXPERT() ? settings.touches : 5;
+const EXPERT_ONLY = new Set(["bondF", "bondB", "stop", "fleche", "flunge"]);
 if (!LEVELS[settings.level]) settings.level = "medium";
 if (!CLUBS[settings.club1]) settings.club1 = "parcival";
 if (!CLUBS[settings.club2]) settings.club2 = "schekul";
@@ -383,13 +396,16 @@ function startGame(demo) {
   G.P = [makeFencer(0, !demo, "medium"), makeFencer(1, !demo && two, demo ? "medium" : settings.level)];
   if (demo) G.P[0].bot.lv = LEVELS.medium;
   G.P[0].club = CLUBS[settings.club1]; G.P[1].club = CLUBS[settings.club2];
-  G.P[0].nat = NATIONS[settings.nat1]; G.P[1].nat = NATIONS[settings.nat2];
-  for (const f of G.P) { f.natKey = f.side ? settings.nat2 : settings.nat1; f.charges = f.nat.power ? Math.max(1, Math.round(settings.touches / 5)) : 0; }
+  for (const f of G.P) {
+    f.natKey = EXPERT() ? (f.side ? settings.nat2 : settings.nat1) : "none";
+    f.nat = NATIONS[f.natKey];
+    f.charges = f.nat.power ? Math.max(1, Math.round(TOUCHES() / 5)) : 0;
+  }
   G.note = null;
   G.P[0].label = demo ? "Bot" : two ? "Player 1" : "You";
   G.P[1].label = demo ? "Bot" : two ? "Player 2" : "Bot · " + LEVELS[settings.level].name;
-  G.score = [0, 0]; G.t = 0; G.prio = -1; G.parts = []; G.target = settings.touches;
-  G.clock = BOUT_TIME[settings.touches];
+  G.score = [0, 0]; G.t = 0; G.prio = -1; G.parts = []; G.target = TOUCHES();
+  G.clock = BOUT_TIME[TOUCHES()];
   G.cam = 0; G.refX = 0; G.refArms = { L: [.12, .06, 0], R: [.12, .06, 0] };
   resetPositions(true);
   toReady();
@@ -436,9 +452,10 @@ function offenseEnd(f) {
 function request(f, act, fromQueue) {
   if (G.state !== "fence" && G.state !== "lock") return false;
   if (G.t < f.teaUntil) return false;
+  if (!EXPERT() && EXPERT_ONLY.has(act)) { if (act === "stop") act = "attack"; else if (act === "bondF") act = "fwd"; else if (act === "bondB") act = "back"; else return false; }
   const W = WPN(), sp = f.charge > G.t && /attack|fleche|flunge/.test(act) && G.t >= f.ripUntil ? W.speed * 1.35 : W.speed, D = v => v / sp;
   // a second attack press early in a lunge turns it into a flèche (or a flunge at sabre)
-  if (act === "attack" && f.off && f.off.active && f.off.base === "lunge" && G.t - f.off.start < .16 / sp && !f.hit) {
+  if (EXPERT() && act === "attack" && f.off && f.off.active && f.off.base === "lunge" && G.t - f.off.start < .16 / sp && !f.hit) {
     if (W.fleche) { f.off.base = "fleche"; f.off.label = "flèche"; setSeq(f, flecheSeq(W, true)); }
     else { f.off.base = "flunge"; f.off.label = "flunge"; setSeq(f, flungeSeq(W, true)); }
     return true;
@@ -1057,6 +1074,16 @@ function drawFlag(fl, x, y, w, h) {
   ctx.restore();
   ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
 }
+// Starter help: a marker under the opponent that lights up gold when a plain lunge would reach
+function drawRange(f) {
+  const o = other(f), d = Math.abs(o.x - f.x), inR = d <= 2.18;
+  const x = sx(o.x + o.face * .1), y = FLOOR + 14;
+  ctx.save();
+  ctx.fillStyle = inR ? `rgba(255,210,87,${.55 + .3 * Math.sin(G.t * 10)})` : "rgba(236,240,244,.18)";
+  ctx.beginPath(); ctx.ellipse(x, y, .5 * S, .06 * S, 0, 0, 7); ctx.fill();
+  if (inR && G.state === "fence") { ctx.font = "700 16px 'Barlow Condensed', 'Arial Narrow', sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#ffd257"; ctx.fillText("IN RANGE: LUNGE!", x, y + 30); }
+  ctx.restore();
+}
 function silverGrad(x1, y1, x2, y2) { const g = ctx.createLinearGradient(x1, y1, x2, y2); g.addColorStop(0, "#9aa3ae"); g.addColorStop(.45, "#e7ebf0"); g.addColorStop(1, "#8d96a2"); return g; }
 function drawFencer(f) {
   const p = f.pose, W = WPN(), sd = SIDE[f.side], o = other(f);
@@ -1261,6 +1288,7 @@ function render() {
   drawPiste();
   // shadows
   for (const f of G.P) { ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.beginPath(); ctx.ellipse(sx(f.x + f.face * .1), FLOOR + 4, .75 * S, .07 * S, 0, 0, 7); ctx.fill(); }
+  if (!EXPERT() && !G.demo && (G.state === "fence" || G.state === "ready")) for (const f of G.P) if (f.human) drawRange(f);
   for (const f of G.P) drawFencer(f);
   for (const q of G.parts) { ctx.fillStyle = `rgba(255,236,170,${Math.min(1, q.life * 4)})`; ctx.fillRect(sx(q.x) - 1.5, sy(q.y) - 1.5, 3, 3); }
   for (const s of [0, 1]) if (G.flash[s] > 0) {
@@ -1300,10 +1328,18 @@ function syncMenu() {
   $("club2").setAttribute("aria-label", settings.mode === "2p" ? "Green fencer's club" : "Bot's club");
   for (const b of $("lenSeg").children) b.setAttribute("aria-pressed", String(+b.dataset.touches === settings.touches));
   $("levelField").hidden = settings.mode !== "bot";
+  for (const b of $("skillSeg").children) b.setAttribute("aria-pressed", String(b.dataset.skill === settings.skill));
+  for (const id of ["clubField", "natField", "lenField"]) $(id).hidden = !EXPERT();
+  $("skilldesc").textContent = EXPERT() ? "Every move, clubs, superpowers and longer bouts." : "New to fencing? Just step, lunge and parry. First to 5 touches; a gold marker shows when you're close enough to lunge.";
   $("wdesc").textContent = WPN().desc;
   const fl = WPN().fleche ? "flèche" : "flunge";
   const moves = `Double-tap forward: balestra. Double-tap back: jump back. Attack while stepping forward: advance-lunge. ${fl[0].toUpperCase() + fl.slice(1)}: its own key or button, or attack twice fast. Back + attack: stop-hit. Parry, then attack at once: riposte.`;
-  if (touchSeen) {
+  if (!EXPERT()) {
+    const basics = `Step in until the gold marker lights under your opponent, then lunge. When they lunge at you, parry, then lunge straight away to riposte.`;
+    if (touchSeen) $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks.</div><div><b>How to score</b>${basics}</div>`;
+    else if (settings.mode === "2p") $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry</div><div style="grid-column:1/-1"><b>How to score</b>${basics}</div>`;
+    else $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>P</kbd> pause</div><div><b>How to score</b>${basics}</div>`;
+  } else if (touchSeen) {
     $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks, <b style="display:inline">${fl}</b> runs in, <b style="display:inline">★</b> uses your superpower.</div><div><b>Moves</b>${moves}</div>`;
   } else if (settings.mode === "2p") {
     $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry · <kbd>E</kbd> ${fl} · <kbd>Q</kbd> superpower</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry · <kbd>/</kbd> or right <kbd>Shift</kbd> ${fl} · <kbd>.</kbd> or <kbd>Enter</kbd> superpower</div><div style="grid-column:1/-1"><b>Moves</b>${moves}</div>`;
@@ -1311,6 +1347,7 @@ function syncMenu() {
     $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>E</kbd>/<kbd>Space</kbd> ${fl} · <kbd>Q</kbd>/<kbd>F</kbd> superpower · <kbd>P</kbd> pause</div><div><b>Moves</b>${moves}</div>`;
   }
 }
+$("skillSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.skill = b.dataset.skill; saveSettings(); syncMenu(); startGame(true); });
 $("modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.mode = b.dataset.mode; saveSettings(); syncMenu(); });
 $("levelSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.level = b.dataset.level; saveSettings(); syncMenu(); });
 $("wpnSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.weapon = b.dataset.wpn; saveSettings(); syncMenu(); startGame(true); });
@@ -1341,7 +1378,13 @@ function setTouch(on) {
   const FL = WPN().fleche ? "Flèche" : "Flunge";
   const pw = p => G.P[p] && G.P[p].nat && G.P[p].nat.power ? btn(p, "power", "★ " + G.P[p].nat.short, "pw") : "<span></span>";
   const btn = (p, act, label, cls) => `<button class="tbtn ${cls || ""}" data-p="${p}" data-act="${act}" aria-label="${act}">${label}</button>`;
-  if (settings.mode === "2p") {
+  if (!EXPERT()) {
+    el.innerHTML = settings.mode === "2p" ?
+      `<div class="pad quad p1" style="grid-template-columns:auto auto">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}</div>` +
+      `<div class="pad quad p2" style="grid-template-columns:auto auto">${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>` :
+      `<div class="pad">${btn(0, "left", "◀", "big")}${btn(0, "right", "▶", "big")}</div>` +
+      `<div class="pad">${btn(0, "parry", "Parry", "big")}${btn(0, "attack", "Lunge", "big atk")}</div>`;
+  } else if (settings.mode === "2p") {
     el.innerHTML =
       `<div class="pad quad p1">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "fleche", FL, "fl")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}${pw(0)}</div>` +
       `<div class="pad quad p2">${btn(1, "fleche", FL, "fl")}${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}${pw(1)}${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>`;

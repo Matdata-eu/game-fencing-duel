@@ -5,6 +5,8 @@ One-on-one fencing as an installable web app (PWA). Pick foil, épée or sabre; 
 **Play:** https://matdata-eu.github.io/game-fencing-duel/
 
 ## Modes
+- **Starter** (default): for people who have never fenced. Only step, lunge and parry (lunge right after a parry to riposte), first to 5 touches, no superpowers, and a gold marker under your opponent shows when a lunge will reach. The menu only asks for opponent, bot level and weapon.
+- **Expert**: everything below, including balestra, flèche, stop-hits, clubs, superpowers and 10- or 15-touch bouts.
 - **Bot**: you (red, left) against a bot (green, right) on Easy, Medium or Hard. Harder bots react faster, parry more often, riposte sooner and judge distance better.
 - **2 Players**: two people on one device. Keyboard: Red `A D` step, `S` lunge, `W` parry, `E` flèche. Green `← →` step, `↓` lunge, `↑` parry, `/` or right `Shift` flèche. Against the bot, `Space` also does a flèche. On a touchscreen each player gets buttons on their side.
 - **Clubs**: fence for [Schermclub Parcival](https://www.schermclubparcival.be/) (Leuven), for Schekul (the KU Leuven student fencing club Parcival grew out of), or for no club. The club shows on the socks, the crest on the jacket and under the fencer's name; red and green stay with the side, like the lights on the scoring box. Defaults: you fence for Parcival, the bot for Schekul.
