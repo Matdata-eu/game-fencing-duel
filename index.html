@@ -356,6 +356,62 @@ const sfx = {
   hooves: () => { for (let i = 0; i < 6; i++) tone(120 + (i % 2) * 30, .06, "sine", .18, -40, i * .09); },
   bell: () => { tone(880, .5, "sine", .08); tone(1320, .4, "sine", .04); },
 };
+// Crowd reactions, synthesized: a few dozen voices sung through vowel formants
+// ("yeah" for a cheer, "ooo" for a boo), a breathy noise bed, and for cheers some claps and whistles.
+function crowd(kind, big) {
+  if (!AC || muted || G.demo) return;
+  if (!noiseBuf) { noiseBuf = AC.createBuffer(1, AC.sampleRate * 1.5, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const cheer = kind === "cheer", t0 = AC.currentTime, dur = big ? 2.6 : 1.9, R = Math.random;
+  const end = t0 + dur, peak = (cheer ? .7 : .85) * (big ? 1.25 : 1);
+  const out = AC.createGain();
+  out.gain.setValueAtTime(.0001, t0);
+  out.gain.exponentialRampToValueAtTime(peak, t0 + (cheer ? .15 : .4));
+  out.gain.setValueAtTime(peak, t0 + dur * .45);
+  out.gain.exponentialRampToValueAtTime(.0001, end);
+  out.connect(AC.destination);
+  const bus = AC.createGain();
+  const formants = cheer ? [[800, 5, 1], [1300, 7, .7], [2700, 9, .3]] : [[320, 4, 1], [780, 6, .4], [2400, 9, .08]];
+  for (const [fq, q, g] of formants) {
+    const bp = AC.createBiquadFilter(), gg = AC.createGain();
+    bp.type = "bandpass"; bp.frequency.value = fq; bp.Q.value = q; gg.gain.value = g * 2.2;
+    bus.connect(bp).connect(gg).connect(out);
+  }
+  const voices = big ? 22 : 16;
+  for (let i = 0; i < voices; i++) {
+    const o = AC.createOscillator(), g = AC.createGain(), lfo = AC.createOscillator(), lg = AC.createGain();
+    const st = t0 + R() * (cheer ? .12 : .35), f0 = cheer ? 170 + R() * 280 : 90 + R() * 120;
+    o.type = "sawtooth";
+    // cheers rise, boos sag
+    o.frequency.setValueAtTime(f0 * (cheer ? .8 : 1.06), st);
+    o.frequency.linearRampToValueAtTime(f0, st + .3);
+    o.frequency.linearRampToValueAtTime(f0 * (cheer ? 1.15 : .8), end);
+    lfo.frequency.value = 4 + R() * 3; lg.gain.value = f0 * .025;
+    g.gain.setValueAtTime(.0001, st); g.gain.exponentialRampToValueAtTime(1.6 / voices, st + .12);
+    lfo.connect(lg).connect(o.frequency); o.connect(g).connect(bus);
+    o.start(st); lfo.start(st); o.stop(end + .05); lfo.stop(end + .05);
+  }
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), ng = AC.createGain();
+  s.buffer = noiseBuf; s.loop = true; f.type = "bandpass"; f.frequency.value = cheer ? 1400 : 450; f.Q.value = .6; ng.gain.value = cheer ? .45 : .35;
+  s.connect(f).connect(ng).connect(out); s.start(t0, R()); s.stop(end);
+  if (!cheer) return;
+  const claps = big ? 34 : 22;
+  for (let i = 0; i < claps; i++) {
+    const c = AC.createBufferSource(), cf = AC.createBiquadFilter(), cg = AC.createGain(), ct = t0 + .1 + R() * (dur - .5);
+    c.buffer = noiseBuf; cf.type = "bandpass"; cf.frequency.value = 1100 + R() * 1400; cf.Q.value = 1.4;
+    cg.gain.setValueAtTime(.12 + R() * .1, ct); cg.gain.exponentialRampToValueAtTime(.0001, ct + .05);
+    c.connect(cf).connect(cg).connect(AC.destination); c.start(ct, R()); c.stop(ct + .06);
+  }
+  for (let i = 0, n = big ? 2 : 1; i < n; i++) {
+    const w = AC.createOscillator(), wg = AC.createGain(), wt = t0 + .2 + R() * .6, wf = 2100 + R() * 700;
+    w.type = "sine"; w.frequency.setValueAtTime(wf * .8, wt); w.frequency.exponentialRampToValueAtTime(wf * 1.15, wt + .25);
+    w.frequency.setValueAtTime(wf * .9, wt + .45); w.frequency.exponentialRampToValueAtTime(wf * 1.2, wt + .75);
+    wg.gain.setValueAtTime(.0001, wt); wg.gain.exponentialRampToValueAtTime(.035, wt + .05);
+    wg.gain.setValueAtTime(.035, wt + .3); wg.gain.exponentialRampToValueAtTime(.0001, wt + .8);
+    w.connect(wg).connect(AC.destination); w.start(wt); w.stop(wt + .85);
+  }
+}
+// Cheer when a human scores, boo when the bot does.
+const crowdFor = (human, big) => crowd(human ? "cheer" : "boo", big);
 let frVoice = null;
 function pickVoice() { try { const v = speechSynthesis.getVoices(); frVoice = v.find(x => /^fr(-|_)FR/i.test(x.lang)) || v.find(x => /^fr/i.test(x.lang)) || null; } catch (e) {} }
 try { pickVoice(); speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) {}
@@ -740,6 +796,7 @@ function applyCall() {
   if (c.kind) for (const s of [0, 1]) if (c.kind[s] && c.pts[s]) G.P[s].stats[c.kind[s] === "double" ? "double" : c.kind[s]]++;
   const touched = c.pts[0] || c.pts[1];
   if (touched) for (const f of G.P) f.homeRef = false;
+  if (touched) crowdFor(G.P.some(f => c.pts[f.side] && f.human), G.score[0] >= G.target || G.score[1] >= G.target);
   if (G.score[0] >= G.target || G.score[1] >= G.target || (G.prio >= 0 && touched)) return gameOver();
   resetPositions(false);
   if (touched) { const [A, B] = G.P; A.x = -EG; B.x = EG; }
