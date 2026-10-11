@@ -1,0 +1,17 @@
+{
+  "name": "Piste Duel",
+  "short_name": "Piste Duel",
+  "description": "Fencing in foil, épée or sabre: play a friend on the same device or a bot on Easy, Medium or Hard.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0e1319",
+  "theme_color": "#0e1319",
+  "categories": ["games", "sports"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
