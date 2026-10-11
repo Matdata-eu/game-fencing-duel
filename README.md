@@ -20,6 +20,20 @@ One-on-one fencing as an installable web app (PWA). Pick foil, épée or sabre; 
 | Lockout | 300 ms | 45 ms | 170 ms |
 | Forward rush | flèche | flèche | flunge (flèche is not allowed) |
 
+## Superpowers
+Each fencer can pick a tongue-in-cheek national superpower (or none). You get one use per 5 touches of bout length. Press `Q` (Red) or `.` (Green), or the ★ button.
+
+| Nation | Superpower | When | What happens |
+|---|---|---|---|
+| Belgium | Belgian compromise | the referee gives a touch against you | After long negotiations, everybody gets a point. |
+| Italy | Protesta! | the referee gives a touch against you | You protest at length. Half the time the referee gives in and annuls the touch; otherwise it's a yellow card. |
+| France | Home referee | during the bout | The referee speaks French anyway: until the next touch, every close double goes your way. |
+| Hungary | Hussar charge | during the bout | Your next attack gallops in, longer and faster. |
+| Germany | Precision | during the bout | For 8 seconds every incoming attack is parried automatically, exactly on time. |
+| Great Britain | Tea time | during the bout | Your opponent politely accepts a cup of tea and stops fencing for a moment. |
+
+The bot uses its superpower too.
+
 ## Moves
 - **Step forward / back** (pas en avant / pas en arrière): tap or hold a direction.
 - **Balestra** (jump forward): double-tap forward. Lunge right after it for a balestra lunge. Double-tap back to jump back.

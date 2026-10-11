@@ -75,7 +75,7 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
 .opts{display:grid;gap:14px}
 .clubs{display:flex;gap:6px;flex-wrap:wrap}
 .clubs select{flex:1 1 140px;min-width:0;appearance:none;-webkit-appearance:none;padding:10px 34px 10px 12px;border-radius:9px;border:1px solid var(--line);border-left:6px solid var(--red);background:rgba(236,240,244,.06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23eef1f4' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 12px center;color:var(--chalk);font:600 18px var(--body);cursor:pointer}
-.clubs select#club2{border-left-color:var(--green)}
+.clubs select#club2,.clubs select#nat2{border-left-color:var(--green)}
 .clubs select option{background:#0e1319;color:#eef1f4}
 
 @media (max-height:560px) and (min-width:620px){
@@ -94,6 +94,8 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
 .pad{display:grid;grid-auto-flow:column;gap:10px;pointer-events:auto;align-items:end}
 .pad.quad{grid-template-rows:auto auto;grid-auto-flow:row;grid-template-columns:auto auto auto}
 .pad.quad .tbtn{width:60px;height:60px;font-size:13px}
+.tbtn.pw{background:rgba(255,210,87,.3);border-color:var(--led);font-size:12px;letter-spacing:.02em}
+.tbtn.pw.off{opacity:.35}
 .tbtn.fl{background:rgba(255,210,87,.14);border-color:rgba(255,210,87,.7)}
 .tbtn{width:70px;height:70px;border-radius:50%;background:rgba(236,240,244,.1);border:2px solid rgba(236,240,244,.28);color:var(--chalk);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;touch-action:none;display:grid;place-items:center}
 .tbtn.big{width:84px;height:84px}
@@ -158,6 +160,14 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
             <select id="club1" aria-label="Red fencer's club"></select>
             <select id="club2" aria-label="Green fencer's club"></select>
           </div>
+        </div>
+        <div class="field">
+          <div class="label">Superpowers</div>
+          <div class="clubs">
+            <select id="nat1" aria-label="Red fencer's superpower"></select>
+            <select id="nat2" aria-label="Green fencer's superpower"></select>
+          </div>
+          <p class="wdesc" id="natdesc"></p>
         </div>
         <div class="field">
           <div class="label">Bout</div>
@@ -232,6 +242,23 @@ const CLUBS = {
   none:     { name: "No club", full: "No club", main: "#eceff2", trim: "#9aa4b0", ink: "#58616c", letter: "" },
 };
 const CLUB_ORDER = ["parcival", "schekul", "none"];
+// Tongue-in-cheek national superpowers. "call" powers work while the referee gives a touch against you; "fence" powers during the bout.
+const NATIONS = {
+  none: { name: "No superpower", power: "", flag: null },
+  bel: { name: "Belgium", power: "Belgian compromise", short: "Compromise", when: "call", flag: { v: ["#1a1a1a", "#fdda24", "#ef3340"] },
+         desc: "Belgium: when a touch goes against you, negotiate until everybody gets a point." },
+  ita: { name: "Italy", power: "Protesta!", short: "Protesta", when: "call", flag: { v: ["#009246", "#ffffff", "#ce2b37"] },
+         desc: "Italy: when a touch goes against you, protest to the referee at length. Half the time the touch is annulled; otherwise it's a yellow card." },
+  fra: { name: "France", power: "Home referee", short: "Arbitre", when: "fence", flag: { v: ["#0055a4", "#ffffff", "#ef4135"] },
+         desc: "France: the referee speaks French anyway. Until the next touch, every close call goes your way." },
+  hun: { name: "Hungary", power: "Hussar charge", short: "Hussar", when: "fence", flag: { h: ["#ce2939", "#ffffff", "#477050"] },
+         desc: "Hungary: your next attack gallops in like the light cavalry, longer and faster." },
+  ger: { name: "Germany", power: "Precision", short: "Präzision", when: "fence", flag: { h: ["#000000", "#dd0000", "#ffce00"] },
+         desc: "Germany: for 8 seconds every parry happens automatically and exactly on time." },
+  gbr: { name: "Great Britain", power: "Tea time", short: "Tea", when: "fence", flag: { uk: true },
+         desc: "Great Britain: offer a cup of tea. Your opponent is far too polite to refuse, and stops fencing for a moment." },
+};
+const NATION_ORDER = ["bel", "ita", "fra", "hun", "ger", "gbr", "none"];
 const SIDE = [
   { name: "Red", fr: "droite", col: "#e5484d", sock: "#d63a40", glow: "255,70,70" },
   { name: "Green", fr: "gauche", col: "#2fcf6f", sock: "#22a456", glow: "60,255,120" },
@@ -256,13 +283,15 @@ function mixPose(a, b, k) {
 const clonePose = a => mixPose(a, a, 0);
 
 // ---------- settings ----------
-const settings = { mode: "bot", level: "medium", weapon: "foil", touches: 5, club1: "parcival", club2: "schekul" };
+const settings = { mode: "bot", level: "medium", weapon: "foil", touches: 5, club1: "parcival", club2: "schekul", nat1: "bel", nat2: "ita" };
 try { Object.assign(settings, JSON.parse(localStorage.getItem("pisteduel.settings") || "{}")); } catch (e) {}
 if (!WEAPONS[settings.weapon]) settings.weapon = "foil";
 if (!BOUT_TIME[settings.touches]) settings.touches = 5;
 if (!LEVELS[settings.level]) settings.level = "medium";
 if (!CLUBS[settings.club1]) settings.club1 = "parcival";
 if (!CLUBS[settings.club2]) settings.club2 = "schekul";
+if (!NATIONS[settings.nat1]) settings.nat1 = "bel";
+if (!NATIONS[settings.nat2]) settings.nat2 = "ita";
 function saveSettings() { try { localStorage.setItem("pisteduel.settings", JSON.stringify(settings)); } catch (e) {} }
 
 // ---------- helpers ----------
@@ -310,11 +339,17 @@ const sfx = {
   hit: () => tone(1046, .7, "square", .05),
   white: () => tone(880, .7, "square", .04),
   call: () => tone(660, .08, "sine", .04),
+  power: () => { tone(520, .12, "triangle", .08, 400); tone(780, .2, "triangle", .06, 500, .08); },
+  hooves: () => { for (let i = 0; i < 6; i++) tone(120 + (i % 2) * 30, .06, "sine", .18, -40, i * .09); },
   bell: () => { tone(880, .5, "sine", .08); tone(1320, .4, "sine", .04); },
 };
 let frVoice = null;
 function pickVoice() { try { const v = speechSynthesis.getVoices(); frVoice = v.find(x => /^fr(-|_)FR/i.test(x.lang)) || v.find(x => /^fr/i.test(x.lang)) || null; } catch (e) {} }
 try { pickVoice(); speechSynthesis.addEventListener("voiceschanged", pickVoice); } catch (e) {}
+function sayLang(text, lang) {
+  if (muted || G.demo || !("speechSynthesis" in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = lang; u.rate = 1.3; u.pitch = 1.2; speechSynthesis.speak(u); } catch (e) {}
+}
 function say(text) {
   if (muted || G.demo || !("speechSynthesis" in window)) return;
   try {
@@ -334,7 +369,8 @@ const other = f => G.P[1 - f.side];
 function makeFencer(side, human, levelKey) {
   const f = { side, face: side ? -1 : 1, human, x: side ? EG : -EG, seq: [], pose: clonePose(POSE.guard),
     off: null, hit: null, ripUntil: -9, lastFwd: -9, lastBack: -9, bondEnd: -9, queue: null, live: false, parrying: false, land: false,
-    input: { left: false, right: false, attack: false, parry: false, fleche: false }, prev: { left: false, right: false, attack: false, parry: false, fleche: false },
+    input: { left: false, right: false, attack: false, parry: false, fleche: false, power: false }, prev: { left: false, right: false, attack: false, parry: false, fleche: false, power: false },
+    teaUntil: -9, protestUntil: -9, charge: 0, precise: 0, homeRef: false, charges: 0,
     bot: null, label: "", stats: { attack: 0, riposte: 0, counter: 0, double: 0 } };
   if (!human) f.bot = new Bot(f, LEVELS[levelKey]);
   return f;
@@ -347,6 +383,9 @@ function startGame(demo) {
   G.P = [makeFencer(0, !demo, "medium"), makeFencer(1, !demo && two, demo ? "medium" : settings.level)];
   if (demo) G.P[0].bot.lv = LEVELS.medium;
   G.P[0].club = CLUBS[settings.club1]; G.P[1].club = CLUBS[settings.club2];
+  G.P[0].nat = NATIONS[settings.nat1]; G.P[1].nat = NATIONS[settings.nat2];
+  for (const f of G.P) { f.natKey = f.side ? settings.nat2 : settings.nat1; f.charges = f.nat.power ? Math.max(1, Math.round(settings.touches / 5)) : 0; }
+  G.note = null;
   G.P[0].label = demo ? "Bot" : two ? "Player 1" : "You";
   G.P[1].label = demo ? "Bot" : two ? "Player 2" : "Bot · " + LEVELS[settings.level].name;
   G.score = [0, 0]; G.t = 0; G.prio = -1; G.parts = []; G.target = settings.touches;
@@ -363,7 +402,7 @@ function resetPositions(center) {
   let m = center ? 0 : clamp((A.x + B.x) / 2, -END + 2.6, END - 2.6);
   A.x = m - EG; B.x = m + EG;
   for (const f of G.P) {
-    f.seq = []; f.pose = clonePose(POSE.guard); f.off = null; f.hit = null; f.ripUntil = -9; f.queue = null;
+    f.seq = []; f.pose = clonePose(POSE.guard); f.off = null; f.hit = null; f.ripUntil = -9; f.queue = null; f.teaUntil = -9; f.protestUntil = -9;
     if (f.bot) f.bot.reset();
   }
   newPhrase();
@@ -396,7 +435,8 @@ function offenseEnd(f) {
 }
 function request(f, act, fromQueue) {
   if (G.state !== "fence" && G.state !== "lock") return false;
-  const W = WPN(), sp = W.speed, D = v => v / sp;
+  if (G.t < f.teaUntil) return false;
+  const W = WPN(), sp = f.charge > G.t && /attack|fleche|flunge/.test(act) && G.t >= f.ripUntil ? W.speed * 1.35 : W.speed, D = v => v / sp;
   // a second attack press early in a lunge turns it into a flèche (or a flunge at sabre)
   if (act === "attack" && f.off && f.off.active && f.off.base === "lunge" && G.t - f.off.start < .16 / sp && !f.hit) {
     if (W.fleche) { f.off.base = "fleche"; f.off.label = "flèche"; setSeq(f, flecheSeq(W, true)); }
@@ -419,8 +459,8 @@ function request(f, act, fromQueue) {
       startOffense(f, "stop", "stop-hit");
       setSeq(f, [{ p: "extend", d: D(.08), live: true }, { p: "extend", d: D(.16), live: true, land: true }, { p: "guard", d: D(.22), end: true }]);
       break;
-    case "fleche": startOffense(f, "fleche", "flèche"); setSeq(f, flecheSeq(W)); break;
-    case "flunge": startOffense(f, "flunge", "flunge"); setSeq(f, flungeSeq(W)); break;
+    case "fleche": startOffense(f, "fleche", f.charge > G.t ? "hussar flèche" : "flèche"); setSeq(f, flecheSeq(W, false, sp)); if (f.charge > G.t) { f.charge = 0; sfx.hooves(); } break;
+    case "flunge": startOffense(f, "flunge", f.charge > G.t ? "hussar flunge" : "flunge"); setSeq(f, flungeSeq(W, false, sp)); if (f.charge > G.t) { f.charge = 0; sfx.hooves(); } break;
     case "attack": {
       if (G.t < f.ripUntil) {
         startOffense(f, "riposte", "riposte");
@@ -431,6 +471,7 @@ function request(f, act, fromQueue) {
         break;
       }
       let label = W.key === "sabre" ? "cut" : "lunge";
+      if (f.charge > G.t) { carry += .75; f.charge = 0; label = "hussar charge"; sfx.hooves(); }
       if (carry > 0) label = W.key === "sabre" ? "advance-cut" : "advance-lunge";
       else if (G.t - f.bondEnd < .25) { label = "balestra lunge"; carry = .3; }
       startOffense(f, "lunge", label);
@@ -441,14 +482,14 @@ function request(f, act, fromQueue) {
   f.queue = null;
   return true;
 }
-function flecheSeq(W, cont) {
-  const D = v => v / W.speed;
+function flecheSeq(W, cont, sp) {
+  const D = v => v / (sp || W.speed);
   const s = [{ p: "run", d: D(.42), live: true, move: 2.3, run: true }, { p: "guard", d: D(.32), move: .25, end: true }];
   if (!cont) s.unshift({ p: "extend", d: D(.1), live: true });
   return s;
 }
-function flungeSeq(W, cont) {
-  const D = v => v / W.speed;
+function flungeSeq(W, cont, sp) {
+  const D = v => v / (sp || W.speed);
   const s = [{ p: "lunge", d: D(.22), live: true, move: .8, hop: true }, { p: "lunge", d: D(.12), live: true, land: true }, { p: "guard", d: D(.3), end: true }];
   if (!cont) s.unshift({ p: "extend", d: D(.08), live: true });
   return s;
@@ -461,6 +502,16 @@ function beaten(f) {
 
 // ---------- fencer update ----------
 function updFencer(f, dt) {
+  updFencerPose(f, dt);
+  const p = f.pose, t = G.t;
+  if (t < f.protestUntil) {
+    // both hands up and shaking: the universal "ma che vuoi?"
+    p.wh = [.3 + .06 * Math.sin(t * 15), 1.62 + .08 * Math.sin(t * 9)]; p.bh = [-.05 + .06 * Math.cos(t * 13), 1.72 + .07 * Math.cos(t * 8)]; p.bl = -1.3;
+  } else if (t < f.teaUntil) {
+    p.bh = [.18, 1.32]; p.bl = -1.2; p.wh = [.3, 1.0];
+  }
+}
+function updFencerPose(f, dt) {
   f.live = f.parrying = f.land = false;
   const seg = f.seq[0];
   if (!seg) { f.pose = mixPose(f.pose, POSE.guard, Math.min(1, dt * 10)); return; }
@@ -502,7 +553,9 @@ function checkHit(f) {
   const base = f.face * (tx - o.x);
   const pT = base + tg.torso, pH = base + tg.head, pA = base + tg.arm;
   const best = Math.max(pT, pH, pA);
-  if (o.parrying && best >= -.25 && f.off.active) {
+  const auto = o.precise > G.t && !(o.off && o.off.active) && G.t >= o.teaUntil;
+  if ((o.parrying || auto) && best >= -.25 && f.off.active) {
+    if (auto && !o.parrying) { o.seq = []; setSeq(o, [{ p: "parry", d: .05 }, { p: "parry", d: .16 }, { p: "guard", d: .16 }]); }
     // parried: the attacker loses right of way, the defender may riposte
     f.off.active = false;
     beaten(f);
@@ -528,6 +581,66 @@ function checkHit(f) {
   if (G.state === "fence") { G.state = "lock"; G.lockUntil = G.t + W.lockout; }
 }
 
+// ---------- superpowers ----------
+function canPower(f) {
+  if (G.demo && !f.bot) return false;
+  if (!f.nat || !f.nat.power || f.charges <= 0) return false;
+  if (f.nat.when === "call") {
+    const c = G.call;
+    return G.state === "halt" && c && !c.powered && ["hit", "sortie"].includes(c.reason) && c.pts[1 - f.side] > c.pts[f.side] && G.callT > .55 && G.callT < c.total - .4;
+  }
+  if (G.state !== "fence") return false;
+  if (f.natKey === "fra" && f.homeRef) return false;
+  if (f.natKey === "hun" && f.charge > G.t) return false;
+  if (f.natKey === "ger" && f.precise > G.t) return false;
+  return true;
+}
+function note(fr, en, d) { G.note = { fr, en, until: G.t + (d || 2.2) }; }
+function usePower(f) {
+  if (!canPower(f)) return false;
+  f.charges--;
+  const o = other(f), C = SIDE[f.side].name, c = G.call;
+  sfx.power();
+  switch (f.natKey) {
+    case "ita":
+      c.powered = "ita"; c.protest = { side: f.side, at: G.callT, out: Math.random() < .5 ? "annul" : "card", done: false };
+      c.total = G.callT + 4.6; f.protestUntil = G.t + 3;
+      G.caption = { fr: "Ma che cosa?! Arbitro!", en: `${C} protests to the referee. At length.` };
+      sayLang("Ma no! Arbitro! Ma che cosa fai?", "it-IT");
+      break;
+    case "bel": {
+      c.powered = "bel"; c.compromise = { side: f.side, at: G.callT, done: false };
+      c.total = G.callT + 3.8;
+      G.caption = { fr: "Compromis à la belge…", en: "Negotiations have started. Day 1… day 300… day 541…" };
+      break;
+    }
+    case "fra": f.homeRef = true; note("Arbitre français", `Until the next touch, every close call goes to ${C}.`); break;
+    case "hun": f.charge = G.t + 6; note("Huszárroham!", `${C}'s next attack charges in like the hussars.`); break;
+    case "ger": f.precise = G.t + 8; note("Präzision", `${C} parries automatically, exactly on time, for 8 seconds.`); break;
+    case "gbr":
+      o.teaUntil = G.t + 1.8; o.seq = []; o.queue = null; if (o.off) o.off.active = false;
+      note("Tea time", `${SIDE[o.side].name} politely accepts a cup of tea.`, 1.8);
+      break;
+  }
+  return true;
+}
+function updPowerCall() {
+  const c = G.call;
+  if (!c) return;
+  const pr = c.protest, cp = c.compromise;
+  if (pr && !pr.done && G.callT - pr.at > 2.9) {
+    pr.done = true;
+    if (pr.out === "annul") { c.pts = [0, 0]; G.caption = { fr: "Après réflexion… pas de touche", en: "The referee gives in. The touch is annulled." }; say("Après réflexion, pas de touche."); }
+    else { G.caption = { fr: "Carton jaune !", en: `Yellow card to ${SIDE[pr.side].name} for protesting. The touch stands.` }; say("Carton jaune !"); }
+  }
+  if (cp && !cp.done && G.callT - cp.at > 2) {
+    cp.done = true;
+    const both = G.score[0] + 1 >= G.target && G.score[1] + 1 >= G.target;
+    c.pts = both ? [0, 0] : [1, 1];
+    G.caption = both ? { fr: "Compromis : personne ne marque", en: "The compromise: nobody scores." } : { fr: "Compromis : un point chacun", en: "The compromise: a point each." };
+  }
+}
+
 // ---------- referee calls ----------
 function sigList(...a) { return a.map(x => ({ sig: x[0], side: x[1], d: x[2] || .8 })); }
 function decide(reason) {
@@ -541,6 +654,12 @@ function decide(reason) {
   }
   if (reason === "time") return { sigs: sigList(["halt", -1, 1.2]), fr: "Halte ! Temps", en: "Time is up.", pts };
   const lit = [0, 1].filter(s => hits[s]);
+  const fr = [0, 1].filter(s => G.P[s].homeRef && hits[s] && hits[s].valid);
+  if (lit.length === 2 && fr.length === 1) {
+    const s = fr[0]; pts[s] = 1;
+    return { sigs: sigList(["halt", -1, .55], ["simul", -1, .7], ["attack", s, .7], ["touch", s, 1.1]), fr: `Euh… attaque de ${Dr(s)}, touché !`,
+      en: `It was close, but the French referee saw it ${C(s)}'s way. Point to ${C(s)}.`, pts, kind: kindArr(s, hits[s].kind) };
+  }
   if (!lit.length) return { sigs: sigList(["halt", -1, .6], ["annul", -1, 1]), fr: "Pas de touche", en: "No touch.", pts };
   if (!W.row) {
     if (lit.length === 2) {
@@ -603,6 +722,7 @@ function applyCall() {
   G.score[0] += c.pts[0]; G.score[1] += c.pts[1];
   if (c.kind) for (const s of [0, 1]) if (c.kind[s] && c.pts[s]) G.P[s].stats[c.kind[s] === "double" ? "double" : c.kind[s]]++;
   const touched = c.pts[0] || c.pts[1];
+  if (touched) for (const f of G.P) f.homeRef = false;
   if (G.score[0] >= G.target || G.score[1] >= G.target || (G.prio >= 0 && touched)) return gameOver();
   resetPositions(false);
   if (touched) { const [A, B] = G.P; A.x = -EG; B.x = EG; }
@@ -654,6 +774,12 @@ class Bot {
     const f = this.f, o = other(f), lv = this.lv, W = WPN(), now = G.t;
     const d = Math.abs(o.x - f.x);
     if (this.plan && now >= this.plan.at) { const p = this.plan; this.plan = null; request(f, p.act); }
+    if (canPower(f) && G.state === "fence" && Math.random() < .004) {
+      const k = f.natKey;
+      if (k === "gbr" && d < 2.6) { usePower(f); this.plan = { act: "attack", at: now + .25 }; }
+      else if (k === "hun" && d > 2.4 && d < 3.2) { usePower(f); this.plan = { act: "attack", at: now + .1 }; }
+      else if (k === "fra" || k === "ger") usePower(f);
+    }
     if (f.ripUntil > now && this.ripFor !== f.ripUntil) {
       this.ripFor = f.ripUntil;
       if (Math.random() < .93) this.plan = { act: "attack", at: now + lv.rip * (.4 + Math.random()) };
@@ -702,6 +828,7 @@ const backRoom = f => END + f.face * f.x - .4;
 const KEYMAP = {
   KeyA: [0, "left"], KeyD: [0, "right"], KeyS: [0, "attack"], KeyW: [0, "parry"],
   ArrowLeft: [1, "left"], ArrowRight: [1, "right"], ArrowDown: [1, "attack"], ArrowUp: [1, "parry"],
+  KeyQ: [0, "power"], KeyF: [0, "power"], Period: [1, "power"], Enter: [1, "power"],
   KeyE: [0, "fleche"], Space: [0, "fleche"], ShiftRight: [1, "fleche"], Slash: [1, "fleche"],
 };
 const TOUCH = [{}, {}], TAPS = [{}, {}], KEYS_DOWN = new Set(), KEYS_TAPPED = new Set();
@@ -720,10 +847,11 @@ function keyState(side) {
 
 function humanInput(f) {
   const i = f.input, p = f.prev, K = keyState(f.side), T = TOUCH[f.side];
-  for (const a of ["left", "right", "attack", "parry", "fleche"]) { i[a] = !!(K[a] || T[a] || TAPS[f.side][a]); TAPS[f.side][a] = false; }
+  for (const a of ["left", "right", "attack", "parry", "fleche", "power"]) { i[a] = !!(K[a] || T[a] || TAPS[f.side][a]); TAPS[f.side][a] = false; }
   const fwd = f.face > 0 ? i.right : i.left, back = f.face > 0 ? i.left : i.right;
   const pf = f.face > 0 ? p.right : p.left, pb = f.face > 0 ? p.left : p.right;
-  if (G.state === "fence" || G.state === "lock") {
+  if (i.power && !p.power) usePower(f);
+  else if (G.state === "fence" || G.state === "lock") {
     if (i.fleche && !p.fleche) request(f, WPN().fleche ? "fleche" : "flunge");
     else if (i.attack && !p.attack) request(f, back ? "stop" : "attack");
     else if (i.parry && !p.parry) request(f, "parry");
@@ -748,6 +876,8 @@ function step(dt) {
   for (const f of G.P) {
     if (f.human) humanInput(f);
     else if (G.state === "fence" || G.state === "lock") f.bot.update();
+    else if (G.state === "halt" && canPower(f) && Math.random() < .02) usePower(f);
+    if (G.state === "halt") updPowerCall();
     if (f.queue) { if (G.t - f.queue.t < .18) request(f, f.queue.act, true); else f.queue = null; }
   }
   for (const f of G.P) updFencer(f, dt);
@@ -796,6 +926,15 @@ function refPose() {
     return { L: [.35, -.4, 1], R: [.35, -.4, 1] };
   }
   if (G.state === "fence" && G.t - G.allezT < .5) return { L: [.35, -.4, 1], R: [.35, -.4, 1] };
+  if (G.state === "halt" && c && c.protest) {
+    const pr = c.protest;
+    if (!pr.done) return { L: [.9, 2.2, 1], R: [.9, 2.2, 1] };
+    return pr.out === "annul" ? (() => { const a = .45 + .95 * Math.sin(G.callT * 8); return { L: [a, a, 1], R: [a, a, 1] }; })() : one(pr.side, [2.6, 2.9, 3]);
+  }
+  if (G.state === "halt" && c && c.compromise) {
+    if (!c.compromise.done) { const a = 1.1 + .4 * Math.sin(G.callT * 3); return { L: [a, 2.4, 1], R: [a, 2.4, 1] }; }
+    return { L: [2.4, 2.4, 1], R: [2.4, 2.4, 1] };
+  }
   if ((G.state === "halt" || G.state === "call2") && c) {
     let t = G.callT, s = null;
     for (const x of c.sigs) { if (t < x.d) { s = x; break; } t -= x.d; }
@@ -809,6 +948,7 @@ function refPose() {
       case "touch": return one(s.side, [2.4, 2.4, 1]);
       case "offTarget": return one(s.side, [.55, .5, 2]);
       case "prio": return one(s.side, [1.55, 1.55, 2]);
+      case "card": return one(s.side, [2.6, 2.9, 3]);
       case "annul": { const a = .45 + .95 * Math.sin(G.callT * 8); return { L: [a, a, 1], R: [a, a, 1] }; }
       case "simul": return { L: [.6, 2.95, 0], R: [.6, 2.95, 0] };
       case "double": return { L: [2.4, 2.4, 1], R: [2.4, 2.4, 1] };
@@ -897,11 +1037,26 @@ function drawReferee() {
     const ux = side * Math.sin(t2), uy = Math.cos(t2);
     if (hand === 0) { ctx.beginPath(); ctx.arc(hx + ux * .03 * sc, hy + uy * .03 * sc, .045 * sc, 0, 7); ctx.fill(); }
     else if (hand === 1) { ctx.save(); ctx.translate(hx + ux * .06 * sc, hy + uy * .06 * sc); ctx.rotate(Math.atan2(uy, ux)); ctx.beginPath(); ctx.ellipse(0, 0, .075 * sc, .035 * sc, 0, 0, 7); ctx.fill(); ctx.restore(); }
+    else if (hand === 3) { ctx.beginPath(); ctx.arc(hx, hy, .045 * sc, 0, 7); ctx.fill(); ctx.fillStyle = "#ffd21f"; ctx.fillRect(hx - .04 * sc, hy - .16 * sc, .08 * sc, .12 * sc); }
     else { ctx.beginPath(); ctx.arc(hx + ux * .03 * sc, hy + uy * .03 * sc, .04 * sc, 0, 7); ctx.fill(); ctx.strokeStyle = "#d9a882"; ctx.lineWidth = .02 * sc; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + ux * .14 * sc, hy + uy * .14 * sc); ctx.stroke(); }
   }
   ctx.restore();
 }
 
+function drawFlag(fl, x, y, w, h) {
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  if (fl.v) fl.v.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x + i * w / 3, y, w / 3 + .5, h); });
+  else if (fl.h) fl.h.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x, y + i * h / 3, w, h / 3 + .5); });
+  else if (fl.uk) {
+    ctx.fillStyle = "#012169"; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = h * .22; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y + h); ctx.moveTo(x + w, y); ctx.lineTo(x, y + h); ctx.stroke();
+    ctx.strokeStyle = "#c8102e"; ctx.lineWidth = h * .08; ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.fillRect(x + w * .4, y, w * .2, h); ctx.fillRect(x, y + h * .36, w, h * .28);
+    ctx.fillStyle = "#c8102e"; ctx.fillRect(x + w * .44, y, w * .12, h); ctx.fillRect(x, y + h * .42, w, h * .16);
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
+}
 function silverGrad(x1, y1, x2, y2) { const g = ctx.createLinearGradient(x1, y1, x2, y2); g.addColorStop(0, "#9aa3ae"); g.addColorStop(.45, "#e7ebf0"); g.addColorStop(1, "#8d96a2"); return g; }
 function drawFencer(f) {
   const p = f.pose, W = WPN(), sd = SIDE[f.side], o = other(f);
@@ -978,6 +1133,15 @@ function drawFencer(f) {
   ctx.beginPath(); ctx.moveTo(hd[0] - fx * r * .2, hd[1] + r * .85); ctx.quadraticCurveTo(hd[0] + fx * r * .9, hd[1] + r * 1.05, hd[0] + fx * r * .75, hd[1] + r * .55);
   ctx.lineTo(hd[0] + fx * r * .95, hd[1] + r * 1.35); ctx.lineTo(hd[0] - fx * r * .1, hd[1] + r * 1.4); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = edge; ctx.lineWidth = 1; ctx.stroke();
+  // national flag on the side of the mask, as in international bouts
+  if (f.nat && f.nat.flag) drawFlag(f.nat.flag, hd[0] - fx * r * .55 - r * .32, hd[1] - r * .45, r * .64, r * .42);
+  if (G.t < f.teaUntil) {
+    const h = P(p.bh); ctx.fillStyle = "#fbfbf7"; ctx.strokeStyle = "#8e98a5"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(h[0] - 8, h[1] - 12); ctx.lineTo(h[0] + 8, h[1] - 12); ctx.lineTo(h[0] + 6, h[1]); ctx.lineTo(h[0] - 6, h[1]); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(h[0] + 9, h[1] - 7, 3.5, -1.4, 1.4); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); const st = G.t * 6;
+    ctx.moveTo(h[0], h[1] - 15); ctx.quadraticCurveTo(h[0] + 5 * Math.sin(st), h[1] - 22, h[0] - 2, h[1] - 30); ctx.stroke();
+  }
   // colour band on the mask so the two fencers read apart
   ctx.strokeStyle = sd.col; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(hd[0] - fx * .03 * S, hd[1], r * .95, r * 1.08, 0, fx > 0 ? Math.PI * .6 : Math.PI * -.4, fx > 0 ? Math.PI * 1.4 : Math.PI * .4); ctx.stroke();
   // weapon arm
@@ -1052,8 +1216,18 @@ function drawMachine() {
   ctx.font = "600 15px 'Barlow Condensed', 'Arial Narrow', sans-serif"; ctx.fillStyle = "#a3adb9";
   if (A.club.letter) { ctx.textAlign = "right"; ctx.fillText(A.club.full, cx - w / 2 - 12, y + 50); }
   if (B.club.letter) { ctx.textAlign = "left"; ctx.fillText(B.club.full, cx + w / 2 + 12, y + 50); }
+  for (const f of G.P) {
+    if (!f.nat || !f.nat.power) continue;
+    const ready = canPower(f), xx = f.side ? cx + w / 2 + 12 : cx - w / 2 - 12;
+    ctx.textAlign = f.side ? "left" : "right";
+    ctx.font = "700 15px 'Barlow Condensed', 'Arial Narrow', sans-serif";
+    ctx.fillStyle = f.charges <= 0 ? "rgba(163,173,185,.45)" : ready ? `rgba(255,210,87,${.65 + .35 * Math.sin(G.t * 8)})` : "#c9a94a";
+    const txt = `★ ${f.nat.power.toUpperCase()} ×${f.charges}`, tw = ctx.measureText(txt).width;
+    ctx.fillText(txt, xx, y + 70);
+    drawFlag(f.nat.flag, f.side ? xx + tw + 6 : xx - tw - 24, y + 59, 18, 12);
+  }
   // referee caption
-  const c = G.caption;
+  const c = G.note && G.t < G.note.until && G.state === "fence" ? G.note : G.caption;
   if (c && !(G.state === "menu")) {
     ctx.textAlign = "center";
     const maxW = VW - 48;
@@ -1117,6 +1291,12 @@ function syncMenu() {
     if (!el.options.length) el.innerHTML = CLUB_ORDER.map(k => `<option value="${k}">${CLUBS[k].full}</option>`).join("");
     el.value = settings[key];
   }
+  for (const id of ["nat1", "nat2"]) {
+    const el = $(id);
+    if (!el.options.length) el.innerHTML = NATION_ORDER.map(k => `<option value="${k}">${NATIONS[k].power ? NATIONS[k].name + " · " + NATIONS[k].power : NATIONS[k].name}</option>`).join("");
+    el.value = settings[id];
+  }
+  $("natdesc").textContent = [settings.nat1, settings.nat2].filter((k, i, a) => NATIONS[k].power && a.indexOf(k) === i).map(k => NATIONS[k].desc).join(" ") || "Pure fencing, no tricks.";
   $("club2").setAttribute("aria-label", settings.mode === "2p" ? "Green fencer's club" : "Bot's club");
   for (const b of $("lenSeg").children) b.setAttribute("aria-pressed", String(+b.dataset.touches === settings.touches));
   $("levelField").hidden = settings.mode !== "bot";
@@ -1124,16 +1304,17 @@ function syncMenu() {
   const fl = WPN().fleche ? "flèche" : "flunge";
   const moves = `Double-tap forward: balestra. Double-tap back: jump back. Attack while stepping forward: advance-lunge. ${fl[0].toUpperCase() + fl.slice(1)}: its own key or button, or attack twice fast. Back + attack: stop-hit. Parry, then attack at once: riposte.`;
   if (touchSeen) {
-    $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks, <b style="display:inline">${fl}</b> runs in.</div><div><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks, <b style="display:inline">${fl}</b> runs in, <b style="display:inline">★</b> uses your superpower.</div><div><b>Moves</b>${moves}</div>`;
   } else if (settings.mode === "2p") {
-    $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry · <kbd>E</kbd> ${fl}</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry · <kbd>/</kbd> or right <kbd>Shift</kbd> ${fl}</div><div style="grid-column:1/-1"><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry · <kbd>E</kbd> ${fl} · <kbd>Q</kbd> superpower</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry · <kbd>/</kbd> or right <kbd>Shift</kbd> ${fl} · <kbd>.</kbd> or <kbd>Enter</kbd> superpower</div><div style="grid-column:1/-1"><b>Moves</b>${moves}</div>`;
   } else {
-    $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>E</kbd>/<kbd>Space</kbd> ${fl} · <kbd>P</kbd> pause</div><div><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>E</kbd>/<kbd>Space</kbd> ${fl} · <kbd>Q</kbd>/<kbd>F</kbd> superpower · <kbd>P</kbd> pause</div><div><b>Moves</b>${moves}</div>`;
   }
 }
 $("modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.mode = b.dataset.mode; saveSettings(); syncMenu(); });
 $("levelSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.level = b.dataset.level; saveSettings(); syncMenu(); });
 $("wpnSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.weapon = b.dataset.wpn; saveSettings(); syncMenu(); startGame(true); });
+for (const id of ["nat1", "nat2"]) $(id).addEventListener("change", e => { settings[id] = e.target.value; saveSettings(); syncMenu(); startGame(true); });
 for (const id of ["club1", "club2"]) $(id).addEventListener("change", e => { settings[id] = e.target.value; saveSettings(); for (const [s, k] of [[0, "club1"], [1, "club2"]]) if (G.P[s]) G.P[s].club = CLUBS[settings[k]]; });
 $("lenSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.touches = +b.dataset.touches; saveSettings(); syncMenu(); });
 $("playBtn").addEventListener("click", () => { initAudio(); startGame(false); });
@@ -1158,14 +1339,15 @@ function setTouch(on) {
   el.innerHTML = "";
   if (!on || !touchSeen) { el.hidden = true; return; }
   const FL = WPN().fleche ? "Flèche" : "Flunge";
+  const pw = p => G.P[p] && G.P[p].nat && G.P[p].nat.power ? btn(p, "power", "★ " + G.P[p].nat.short, "pw") : "<span></span>";
   const btn = (p, act, label, cls) => `<button class="tbtn ${cls || ""}" data-p="${p}" data-act="${act}" aria-label="${act}">${label}</button>`;
   if (settings.mode === "2p") {
     el.innerHTML =
-      `<div class="pad quad p1">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "fleche", FL, "fl")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}</div>` +
-      `<div class="pad quad p2">${btn(1, "fleche", FL, "fl")}${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}<span></span>${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>`;
+      `<div class="pad quad p1">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "fleche", FL, "fl")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}${pw(0)}</div>` +
+      `<div class="pad quad p2">${btn(1, "fleche", FL, "fl")}${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}${pw(1)}${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>`;
   } else {
     el.innerHTML =
-      `<div class="pad">${btn(0, "left", "◀", "big")}${btn(0, "right", "▶", "big")}</div>` +
+      `<div class="pad">${btn(0, "left", "◀", "big")}${btn(0, "right", "▶", "big")}${pw(0)}</div>` +
       `<div class="pad stack">${btn(0, "fleche", FL, "fl")}${btn(0, "parry", "Parry", "big")}${btn(0, "attack", "Lunge", "big atk")}</div>`;
   }
   el.hidden = false;
@@ -1186,7 +1368,7 @@ touchEl.addEventListener("pointercancel", tup);
 touchEl.addEventListener("lostpointercapture", tup);
 touchEl.addEventListener("contextmenu", e => e.preventDefault());
 
-window.__fence = { G, settings, startGame: d => startGame(d), step: dt => step(dt), request: (s, a) => request(G.P[s], a), decide };
+window.__fence = { usePower: s => usePower(G.P[s]), G, settings, startGame: d => startGame(d), step: dt => step(dt), request: (s, a) => request(G.P[s], a), decide };
 
 // boot
 syncMenu(); syncMute(); resize();
