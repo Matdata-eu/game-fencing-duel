@@ -92,7 +92,9 @@ kbd{font-family:var(--body);font-weight:700;color:var(--chalk);background:rgba(2
 
 #touch{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:flex-end;padding:0 16px calc(14px + env(safe-area-inset-bottom,0px));pointer-events:none}
 .pad{display:grid;grid-auto-flow:column;gap:10px;pointer-events:auto;align-items:end}
-.pad.quad{grid-template-rows:auto auto;grid-auto-flow:row;grid-template-columns:auto auto}
+.pad.quad{grid-template-rows:auto auto;grid-auto-flow:row;grid-template-columns:auto auto auto}
+.pad.quad .tbtn{width:60px;height:60px;font-size:13px}
+.tbtn.fl{background:rgba(255,210,87,.14);border-color:rgba(255,210,87,.7)}
 .tbtn{width:70px;height:70px;border-radius:50%;background:rgba(236,240,244,.1);border:2px solid rgba(236,240,244,.28);color:var(--chalk);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;touch-action:none;display:grid;place-items:center}
 .tbtn.big{width:84px;height:84px}
 .tbtn.on{background:rgba(236,240,244,.32)}
@@ -332,7 +334,7 @@ const other = f => G.P[1 - f.side];
 function makeFencer(side, human, levelKey) {
   const f = { side, face: side ? -1 : 1, human, x: side ? EG : -EG, seq: [], pose: clonePose(POSE.guard),
     off: null, hit: null, ripUntil: -9, lastFwd: -9, lastBack: -9, bondEnd: -9, queue: null, live: false, parrying: false, land: false,
-    input: { left: false, right: false, attack: false, parry: false }, prev: { left: false, right: false, attack: false, parry: false },
+    input: { left: false, right: false, attack: false, parry: false, fleche: false }, prev: { left: false, right: false, attack: false, parry: false, fleche: false },
     bot: null, label: "", stats: { attack: 0, riposte: 0, counter: 0, double: 0 } };
   if (!human) f.bot = new Bot(f, LEVELS[levelKey]);
   return f;
@@ -379,7 +381,7 @@ function busyFor(f, act) {
 function setSeq(f, segs) { f.seq = segs.map(s => Object.assign({ t: 0 }, s)); }
 function startOffense(f, base, label) {
   const ph = G.ph, o = other(f);
-  f.off = { base, label, kind: "attack", start: G.t, active: true };
+  f.off = { base, label, kind: "attack", start: G.t, active: true, aim: WPN().key === "epee" && (base === "stop" || Math.random() < .2) ? "arm" : "body" };
   if (base === "riposte") { f.off.kind = "riposte"; ph.row = f.side; ph.rowKind = "riposte"; ph.rowT = G.t; ph.simul = false; return; }
   if (ph.row === -1 || ph.row === f.side) { ph.row = f.side; ph.rowKind = "attack"; ph.rowT = G.t; ph.simul = false; }
   else if (ph.rowKind === "attack" && G.t - ph.rowT < .1 && o.off && o.off.active) ph.simul = true;
@@ -485,7 +487,8 @@ const isRun = f => f.seq[0] && (f.seq[0].run || f.seq[0].hop);
 function tipLocal(f) { const p = f.pose, BL = WPN().blade; return [p.wh[0] + Math.cos(p.bl) * BL, p.wh[1] + Math.sin(p.bl) * BL]; }
 function targets(o) {
   const p = o.pose;
-  return { torso: p.sh[0] + .13, head: p.hd[0] + .12, arm: p.wh[0] > .6 ? p.wh[0] + .03 : -9 };
+  // at épée the hand and forearm are always target; at foil and sabre only an extended arm can be reached
+  return { torso: p.sh[0] + .13, head: p.hd[0] + .12, arm: WPN().key === "epee" || p.wh[0] > .6 ? p.wh[0] + .03 : -9 };
 }
 const PARTS = {
   foil:  { torso: "on target", head: "on the mask", arm: "on the arm" },
@@ -512,6 +515,7 @@ function checkHit(f) {
   }
   let part = null;
   if (W.key === "foil") { if (pT >= 0) part = "torso"; else if (pA >= 0 && f.land) part = "arm"; }
+  else if (W.key === "epee" && f.off.aim === "arm" && pA >= 0) part = "arm";
   else {
     if (pT >= 0 || pH >= 0) part = W.key === "sabre" ? (Math.random() < .45 ? "head" : "torso") : (pH > pT + .04 ? "head" : "torso");
     else if (pA >= 0 && f.land) part = "arm";
@@ -698,11 +702,12 @@ const backRoom = f => END + f.face * f.x - .4;
 const KEYMAP = {
   KeyA: [0, "left"], KeyD: [0, "right"], KeyS: [0, "attack"], KeyW: [0, "parry"],
   ArrowLeft: [1, "left"], ArrowRight: [1, "right"], ArrowDown: [1, "attack"], ArrowUp: [1, "parry"],
+  KeyE: [0, "fleche"], Space: [0, "fleche"], ShiftRight: [1, "fleche"], Slash: [1, "fleche"],
 };
 const TOUCH = [{}, {}], TAPS = [{}, {}], KEYS_DOWN = new Set(), KEYS_TAPPED = new Set();
 addEventListener("keydown", e => {
   if (e.code === "KeyP" || e.code === "Escape") { if (G.state !== "menu" && !G.demo && G.state !== "over") { togglePause(); e.preventDefault(); } return; }
-  if (!KEYMAP[e.code] || e.target.tagName === "SELECT") return;
+  if (!KEYMAP[e.code] || e.target.tagName === "SELECT" || !$("menu").hidden || !$("overOv").hidden || !$("pauseOv").hidden) return;
   e.preventDefault(); initAudio(); KEYS_DOWN.add(e.code); if (!e.repeat) KEYS_TAPPED.add(e.code);
 });
 addEventListener("keyup", e => KEYS_DOWN.delete(e.code));
@@ -715,11 +720,12 @@ function keyState(side) {
 
 function humanInput(f) {
   const i = f.input, p = f.prev, K = keyState(f.side), T = TOUCH[f.side];
-  for (const a of ["left", "right", "attack", "parry"]) { i[a] = !!(K[a] || T[a] || TAPS[f.side][a]); TAPS[f.side][a] = false; }
+  for (const a of ["left", "right", "attack", "parry", "fleche"]) { i[a] = !!(K[a] || T[a] || TAPS[f.side][a]); TAPS[f.side][a] = false; }
   const fwd = f.face > 0 ? i.right : i.left, back = f.face > 0 ? i.left : i.right;
   const pf = f.face > 0 ? p.right : p.left, pb = f.face > 0 ? p.left : p.right;
   if (G.state === "fence" || G.state === "lock") {
-    if (i.attack && !p.attack) request(f, back ? "stop" : "attack");
+    if (i.fleche && !p.fleche) request(f, WPN().fleche ? "fleche" : "flunge");
+    else if (i.attack && !p.attack) request(f, back ? "stop" : "attack");
     else if (i.parry && !p.parry) request(f, "parry");
     else if (fwd && !pf) { request(f, G.t - f.lastFwd < .3 ? "bondF" : "fwd"); f.lastFwd = G.t; }
     else if (back && !pb) { request(f, G.t - f.lastBack < .3 ? "bondB" : "back"); f.lastBack = G.t; }
@@ -1116,13 +1122,13 @@ function syncMenu() {
   $("levelField").hidden = settings.mode !== "bot";
   $("wdesc").textContent = WPN().desc;
   const fl = WPN().fleche ? "flèche" : "flunge";
-  const moves = `Double-tap forward: balestra. Double-tap back: jump back. Attack while stepping forward: advance-lunge. Attack twice fast: ${fl}. Back + attack: stop-hit. Parry, then attack at once: riposte.`;
+  const moves = `Double-tap forward: balestra. Double-tap back: jump back. Attack while stepping forward: advance-lunge. ${fl[0].toUpperCase() + fl.slice(1)}: its own key or button, or attack twice fast. Back + attack: stop-hit. Parry, then attack at once: riposte.`;
   if (touchSeen) {
-    $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks.</div><div><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div><b>Touch</b>◀ ▶ step back and forward, <b style="display:inline">Lunge</b> attacks, <b style="display:inline">Parry</b> blocks, <b style="display:inline">${fl}</b> runs in.</div><div><b>Moves</b>${moves}</div>`;
   } else if (settings.mode === "2p") {
-    $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry</div><div style="grid-column:1/-1"><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div class="t1"><b>Red (left)</b><kbd>A</kbd> <kbd>D</kbd> step · <kbd>S</kbd> lunge · <kbd>W</kbd> parry · <kbd>E</kbd> ${fl}</div><div class="t2"><b>Green (right)</b><kbd>←</kbd> <kbd>→</kbd> step · <kbd>↓</kbd> lunge · <kbd>↑</kbd> parry · <kbd>/</kbd> or right <kbd>Shift</kbd> ${fl}</div><div style="grid-column:1/-1"><b>Moves</b>${moves}</div>`;
   } else {
-    $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>P</kbd> pause</div><div><b>Moves</b>${moves}</div>`;
+    $("keys").innerHTML = `<div class="t1"><b>You (red)</b><kbd>A</kbd> <kbd>D</kbd> or <kbd>←</kbd> <kbd>→</kbd> step · <kbd>S</kbd>/<kbd>↓</kbd> lunge · <kbd>W</kbd>/<kbd>↑</kbd> parry · <kbd>E</kbd>/<kbd>Space</kbd> ${fl} · <kbd>P</kbd> pause</div><div><b>Moves</b>${moves}</div>`;
   }
 }
 $("modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; settings.mode = b.dataset.mode; saveSettings(); syncMenu(); });
@@ -1151,15 +1157,16 @@ function setTouch(on) {
   const el = $("touch");
   el.innerHTML = "";
   if (!on || !touchSeen) { el.hidden = true; return; }
+  const FL = WPN().fleche ? "Flèche" : "Flunge";
   const btn = (p, act, label, cls) => `<button class="tbtn ${cls || ""}" data-p="${p}" data-act="${act}" aria-label="${act}">${label}</button>`;
   if (settings.mode === "2p") {
     el.innerHTML =
-      `<div class="pad quad p1">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}</div>` +
-      `<div class="pad quad p2">${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>`;
+      `<div class="pad quad p1">${btn(0, "parry", "Parry")}${btn(0, "attack", "Lunge", "atk")}${btn(0, "fleche", FL, "fl")}${btn(0, "left", "◀")}${btn(0, "right", "▶")}</div>` +
+      `<div class="pad quad p2">${btn(1, "fleche", FL, "fl")}${btn(1, "attack", "Lunge", "atk")}${btn(1, "parry", "Parry")}<span></span>${btn(1, "left", "◀")}${btn(1, "right", "▶")}</div>`;
   } else {
     el.innerHTML =
       `<div class="pad">${btn(0, "left", "◀", "big")}${btn(0, "right", "▶", "big")}</div>` +
-      `<div class="pad">${btn(0, "parry", "Parry", "big")}${btn(0, "attack", "Lunge", "big atk")}</div>`;
+      `<div class="pad stack">${btn(0, "fleche", FL, "fl")}${btn(0, "parry", "Parry", "big")}${btn(0, "attack", "Lunge", "big atk")}</div>`;
   }
   el.hidden = false;
 }

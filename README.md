@@ -6,7 +6,7 @@ One-on-one fencing as an installable web app (PWA). Pick foil, épée or sabre; 
 
 ## Modes
 - **Bot**: you (red, left) against a bot (green, right) on Easy, Medium or Hard. Harder bots react faster, parry more often, riposte sooner and judge distance better.
-- **2 Players**: two people on one device. Keyboard: Red `A D` step, `S` lunge, `W` parry. Green `← →` step, `↓` lunge, `↑` parry. On a touchscreen each player gets buttons on their side.
+- **2 Players**: two people on one device. Keyboard: Red `A D` step, `S` lunge, `W` parry, `E` flèche. Green `← →` step, `↓` lunge, `↑` parry, `/` or right `Shift` flèche. Against the bot, `Space` also does a flèche. On a touchscreen each player gets buttons on their side.
 - **Clubs**: fence for [Schermclub Parcival](https://www.schermclubparcival.be/) (Leuven), for Schekul (the KU Leuven student fencing club Parcival grew out of), or for no club. The club shows on the socks, the crest on the jacket and under the fencer's name; red and green stay with the side, like the lights on the scoring box. Defaults: you fence for Parcival, the bot for Schekul.
 - **Bout**: 5 touches (3 min), 10 touches (6 min) or 15 touches (9 min). If the score is tied at time, the referee draws priority for one extra minute: first touch wins, and if nobody scores the fencer with priority wins.
 
@@ -14,7 +14,7 @@ One-on-one fencing as an installable web app (PWA). Pick foil, épée or sabre; 
 | | Foil | Épée | Sabre |
 |---|---|---|---|
 | Hits with | point | point | edge and point |
-| Valid target | torso (silver lamé vest) | whole body | above the waist, arms and mask (lamé jacket and mask) |
+| Valid target | torso (silver lamé vest) | whole body, including the hand and arm | above the waist, arms and mask (lamé jacket and mask) |
 | Off-target hit | white light, action stops, no point | – | – |
 | Double hits | right of way | a point each (within 1/25 s) | right of way |
 | Lockout | 300 ms | 45 ms | 170 ms |
@@ -24,8 +24,8 @@ One-on-one fencing as an installable web app (PWA). Pick foil, épée or sabre; 
 - **Step forward / back** (pas en avant / pas en arrière): tap or hold a direction.
 - **Balestra** (jump forward): double-tap forward. Lunge right after it for a balestra lunge. Double-tap back to jump back.
 - **Lunge** (fente): attack. Attack while stepping forward for an advance-lunge (marche-fente).
-- **Flèche**: press attack twice quickly (foil and épée). At sabre this becomes a flunge.
-- **Stop-hit** (contre-attaque): hold back and press attack.
+- **Flèche**: its own key or button, or press attack twice quickly (foil and épée). At sabre the same control does a flunge.
+- **Stop-hit** (contre-attaque): hold back and press attack. At épée it goes for the hand or arm, and some attacks aim there too.
 - **Parry and riposte** (parade, riposte): parry as the attack arrives, then attack straight away. A parried attacker can parry the riposte back if it comes late.
 
 ## Right of way and the referee
